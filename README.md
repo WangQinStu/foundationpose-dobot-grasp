@@ -1,11 +1,11 @@
-# FP Robotic Grasping Workspace
+# foundationpose-dobot-grasp Robotic Grasping Workspace
 
 This repository is a three-part workspace for RealSense + YOLO + FoundationPose object pose estimation, optional SDFR pose refinement, and Dobot ROS 2 pick/place control.
 
 ## Layout
 
 ```text
-FP/
+foundationpose-dobot-grasp/
 ├── FoundationPose/   # Vision pipeline: RealSense, YOLO segmentation, FoundationPose pose tracking
 ├── SDFR/             # Optional pose refinement utilities and models
 ├── dobot/            # ROS 2 workspace for Dobot control and the pick/place bridge
@@ -30,10 +30,16 @@ RealSense RGB-D
 
 Terminal 1, start the Dobot ROS 2 bringup as required by your robot setup.
 
+```bash
+cd /home/ptcs/wkSpace/foundationpose-dobot-grasp/dobot
+source install/setup.bash
+ros2 launch cr_robot_ros2 dobot_bringup_ros2.launch.py
+```
+
 Terminal 2, start the pick/place controller and UDP bridge:
 
 ```bash
-cd /home/ptcs/wkSpace/FP/dobot
+cd /home/ptcs/wkSpace/foundationpose-dobot-grasp/dobot
 source install/setup.bash
 ros2 launch dobot_pick_place target_pose_gripper.launch.py
 ```
@@ -41,8 +47,6 @@ ros2 launch dobot_pick_place target_pose_gripper.launch.py
 Terminal 3, run the vision pipeline:
 
 ```bash
-cd /home/ptcs/wkSpace/FP/FoundationPose
-conda activate foundationpose
 python run_realsense_yolo_foundationpose.py \
   --dobot_publish_target \
   --dobot_eye_in_hand 1
