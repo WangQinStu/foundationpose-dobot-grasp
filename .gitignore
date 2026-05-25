@@ -1,0 +1,114 @@
+# Project-local runtime files
+.env
+.env.*
+!.env.example
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+__pypackages__/
+
+# Editors and notebooks
+.idea/
+.vscode/
+.ipynb_checkpoints/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and experiment outputs
+*.log
+logs/
+wandb/
+runs/
+artifacts/
+debug/
+results/
+_results/
+temp_datasets/
+
+# ROS 2 workspace outputs
+dobot/build/
+dobot/install/
+dobot/log/
+dobot/.colcon/
+
+# FoundationPose generated/runtime data
+FoundationPose/debug/
+FoundationPose/demo_data/
+FoundationPose/downloads/
+FoundationPose/weights/
+FoundationPose/realsense/output/
+FoundationPose/realsense/xxx/
+
+# Keep project-specific source assets that are required by the current demo.
+!FoundationPose/yolo26/mesh/
+!FoundationPose/yolo26/mesh/**
+!FoundationPose/yolo26/weight/
+!FoundationPose/yolo26/weight/**
+!FoundationPose/yolo_foundationpose/mesh/
+!FoundationPose/yolo_foundationpose/mesh/**
+!FoundationPose/yolo_foundationpose/weight/
+!FoundationPose/yolo_foundationpose/weight/**
+
+# SDFR generated/runtime data and large datasets
+SDFR/__pycache__/
+SDFR/_results/
+SDFR/results/
+SDFR/datasets/**/render/
+SDFR/temp_datasets/
+SDFR/my_tools/real_data/
+SDFR/my_tools/*.mp4
+
+# Large model/checkpoint/archive files. Use Git LFS or release assets if needed.
+*.pth
+*.pt
+*.onnx
+*.engine
+*.ckpt
+*.bag
+*.db3
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar
+
+# Re-include current lightweight demo assets/checkpoints intentionally used by scripts.
+!FoundationPose/yolo26/weight/*.pt
+!FoundationPose/yolo_foundationpose/weight/*.pt
+
+# Nested upstream repositories. Do not commit their internal git metadata.
+FoundationPose/.git/
+FoundationPose/.git.upstream-backup/
+SDFR/.git/
+SDFR/.git.upstream-backup/
+SDFR/pytorch3d/.git/
+SDFR/pytorch3d/.git.upstream-backup/
+dobot/src/DOBOT_6Axis_ROS2_V4/.git/
+dobot/src/DOBOT_6Axis_ROS2_V4/.git.upstream-backup/
+dobot/src/Step_Motor_ROS2/src/serial_ros2/.git/
+dobot/src/Step_Motor_ROS2/src/serial_ros2/.git.upstream-backup/
