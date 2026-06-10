@@ -17,6 +17,20 @@ from yolo_foundationpose.target_lock import TargetLock
 from yolo_foundationpose.visualization import colorize_depth, draw_pose_axes, draw_pose_overlay, draw_score_panel
 
 
+WINDOW_NAME = 'D435i YOLO bottle mask -> FoundationPose'
+
+
+def close_visualization_windows():
+  # OpenCV HighGUI on Linux sometimes needs a few event-loop ticks after
+  # destroyAllWindows(), otherwise the desktop can mark the last frame frozen.
+  try:
+    cv2.destroyAllWindows()
+    for _ in range(5):
+      cv2.waitKey(1)
+  except cv2.error as exc:
+    logging.warning(f'failed to close OpenCV visualization window cleanly: {exc}')
+
+
 def create_selector(args):
   # YOLO 可能同时分出多个瓶子。selector 会综合置信度、面积、是否靠近画面中心、
   # 深度是否孤立等因素，选出最适合作为 FoundationPose 输入的目标。
@@ -178,6 +192,12 @@ def run(args):
   last_refine_info = pose_refiner.empty_info()
 
   try:
+    try:
+      cv2.startWindowThread()
+    except cv2.error:
+      pass
+    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+
     while True:
       # color_bgr 用于 OpenCV/YOLO 显示；color_rgb 才是 FoundationPose 需要的输入。
       # depth 已经对齐到彩色图，并且超出 zmin/zmax 的值会被置 0。
@@ -261,7 +281,7 @@ def run(args):
       panel = draw_score_panel(color_bgr.shape[0], best, pose is not None, fps_avg,
                                refine_info=last_refine_info)
       show = np.hstack([vis_bgr, depth_vis, panel])
-      cv2.imshow('D435i YOLO bottle mask -> FoundationPose', show)
+      cv2.imshow(WINDOW_NAME, show)
 
       key = cv2.waitKey(1) & 0xFF
       if key == ord('q') or key == 27:
@@ -288,10 +308,15 @@ def run(args):
         logging.info('target lock released')
 
       frame_id += 1
+  except KeyboardInterrupt:
+    logging.info('received Ctrl+C, closing visualization and exiting')
   finally:
+    close_visualization_windows()
     if dobot_bridge is not None:
       dobot_bridge.close()
     if ros_pose_publisher is not None:
       ros_pose_publisher.close()
-    pipeline.stop()
-    cv2.destroyAllWindows()
+    try:
+      pipeline.stop()
+    finally:
+      close_visualization_windows()

@@ -102,7 +102,6 @@ class DobotTargetBridge:
     self.max_translation_jitter = float(args.dobot_pose_max_translation_jitter)
     self.translation_window = deque(maxlen=self.stable_frames)
     self.grasp_offset_obj = _parse_float_list(args.dobot_grasp_offset_obj, 3, 'dobot_grasp_offset_obj')
-    self.grasp_offset_base = _parse_float_list(args.dobot_grasp_offset_base, 3, 'dobot_grasp_offset_base')
     self.tcp_to_tip = _parse_float_list(args.dobot_tcp_to_tip, 3, 'dobot_tcp_to_tip')
     self.use_object_orientation = bool(args.dobot_use_object_orientation)
     self.orientation_mode = str(args.dobot_grasp_orientation_mode).strip().lower()
@@ -210,7 +209,6 @@ class DobotTargetBridge:
 
     ob_in_base = base_T_cam @ ob_in_cam
     grasp_xyz = ob_in_base[:3, 3] + ob_in_base[:3, :3] @ self.grasp_offset_obj
-    grasp_xyz = grasp_xyz + self.grasp_offset_base
 
     planar_angle_deg = None
     if self.orientation_mode == 'object':

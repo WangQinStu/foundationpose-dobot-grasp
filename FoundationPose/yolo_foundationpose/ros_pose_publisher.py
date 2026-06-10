@@ -1,4 +1,5 @@
 import logging
+import sys
 
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -13,8 +14,13 @@ class RosPosePublisher:
     except ImportError as exc:
       raise RuntimeError(
         'ROS 2 pose publishing requires rclpy and geometry_msgs. '
-        'Please run this script from a sourced ROS 2 environment, for example: '
-        'source /opt/ros/<distro>/setup.bash'
+        f'Current Python is {sys.version.split()[0]} at {sys.executable}. '
+        'If you are running FoundationPose from a conda environment while ROS 2 '
+        'Jazzy is installed for system Python 3.12, rclpy cannot be imported in '
+        'this process even after sourcing /opt/ros/jazzy/setup.bash. For Dobot '
+        'closed-loop grasping, start dobot_pick_place target_pose_gripper.launch.py '
+        'on the ROS side and run FoundationPose with --dobot_publish_target '
+        'instead of --ros_publish_pose.'
       ) from exc
 
     self.rclpy = rclpy

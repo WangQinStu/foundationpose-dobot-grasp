@@ -231,9 +231,7 @@ def parse_args():
                       help='眼在手上手眼标定平移向量，单位米，表示 p_gripper = R_cam2gripper * p_cam + t。')
   parser.add_argument('--dobot_grasp_offset_obj', type=str, default='0,0.0675,0',
                       help='抓取点相对物体坐标系原点的偏移，单位米，格式 x,y,z；默认移到 bottle_cad2.obj 的几何中心附近。')
-  parser.add_argument('--dobot_grasp_offset_base', type=str, default='0,0,-0.05',
-                      help='抓取点在 Dobot 基座坐标系下额外叠加的偏移，单位米，格式 x,y,z。')
-  parser.add_argument('--dobot_tcp_to_tip', type=str, default='0,0,0.14',
+  parser.add_argument('--dobot_tcp_to_tip', type=str, default='0,0,0.20',
                       help='TCP 原点到夹爪末端的向量，单位米，在 TCP 坐标系下表达；会从抓取点中扣除该工具长度。')
   parser.add_argument('--dobot_use_object_orientation', type=int, default=0,
                       help='1 表示发布物体姿态作为 TCP 姿态；0 表示使用 dobot_grasp_quat_xyzw 固定抓取姿态。')

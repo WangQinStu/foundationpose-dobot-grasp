@@ -41,6 +41,8 @@ python run_realsense_yolo_foundationpose.py
 
 当前主循环里的 `pose` 是 FoundationPose 的 `ob_in_cam`：物体坐标系到相机坐标系的 4x4 变换，单位是米。换句话说，发布出去的 `PoseStamped` 表示“目标物体在相机光学坐标系下的位置和姿态”。机械臂电脑订阅后，通常还需要用手眼标定外参转换到 `robot_base`。
 
+注意：`--ros_publish_pose` 会在 FoundationPose 进程里直接 import `rclpy`。ROS 2 Jazzy 的 `rclpy` 通常是给系统 Python 3.12 编译的，而 FoundationPose conda 环境是 Python 3.10；这种情况下即使 source 了 ROS 环境也会因为 Python ABI 不匹配而失败。实际 Dobot 闭环抓取请用下一节的 UDP bridge，也就是运行视觉端时使用 `--dobot_publish_target`，不要使用 `--ros_publish_pose`。
+
 视觉电脑先 source ROS 2 环境，然后运行：
 
 ```bash
@@ -128,9 +130,11 @@ python3 run_realsense_yolo_foundationpose.py \
 
 ```bash
 --dobot_grasp_offset_obj 0,0.0675,0
---dobot_grasp_offset_base 0,0,0.02
---dobot_tcp_to_tip 0,0,0.15
+--dobot_tcp_to_tip 0,0,0.14
+--dobot_grasp_orientation_mode fixed
 --dobot_grasp_quat_xyzw qx,qy,qz,qw
+--dobot_grasp_object_axis_obj 0,1,0
+--dobot_grasp_reference_axis_tcp 1,0,0
 --dobot_pose_stable_frames 10
 --dobot_pose_max_translation_jitter 0.006
 ```
@@ -138,6 +142,8 @@ python3 run_realsense_yolo_foundationpose.py \
 `--dobot_tcp_to_tip` 表示 TCP 原点到夹爪末端的向量，单位米，并且是在 TCP 坐标系下表达。视觉端会把它从抓取点里扣掉：让夹爪末端对准瓶子，而不是让 TCP 原点撞到瓶子/桌面。若夹爪还是够不到瓶子，减小这个值；若 TCP 过于靠近瓶子，增大这个值。若夹爪实际沿 TCP 的反方向伸出，把默认值改成 `0,0,-0.15`。
 
 当前默认瓶子模型 `bottle_cad2.obj` 的高度轴是物体坐标系 `Y`，几何中心约在 `Y=0.0675m`，所以默认 `--dobot_grasp_offset_obj 0,0.0675,0` 会把抓取点从瓶底附近移动到瓶身中心附近。
+
+默认使用 `--dobot_grasp_orientation_mode fixed`：优先使用已验证过的固定 TCP 抓取姿态，避免视觉估计出的瓶身方向把腕部转到 Dobot 控制器拒绝的角度。若后续确认控制器能接受随瓶身方向变化的腕部姿态，再临时改成 `planar`。`planar` 会保持固定下探轴，只绕该轴旋转夹爪，把 `--dobot_grasp_reference_axis_tcp` 指定的 TCP 局部轴对齐到 `--dobot_grasp_object_axis_obj` 指定的瓶身长轴投影方向；若发现夹爪开口方向和瓶身差 90 度，把 `--dobot_grasp_reference_axis_tcp 1,0,0` 改成 `0,1,0`。
 
 如果只是桌面测试 topic 连通性，可以临时加 `--dobot_allow_identity_handeye`；真实机械臂抓取不要用单位外参。
 
