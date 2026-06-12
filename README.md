@@ -13,19 +13,19 @@ Click a preview to open the MP4 video on GitHub.
 
 ### 6D Pose Estimation: Single Bottle
 
-[![Single-bottle 6D pose estimation](docs/videos/previews/one_bottle.jpg)](docs/videos/one_bottle.mp4)
+[![Single-bottle 6D pose estimation](docs/videos/previews/one_bottle.png)](docs/videos/one_bottle.mp4)
 
 [Open the single-bottle pose estimation video](docs/videos/one_bottle.mp4)
 
 ### 6D Pose Estimation: Book
 
-[![Book 6D pose estimation](docs/videos/previews/book.jpg)](docs/videos/book.mp4)
+[![Book 6D pose estimation](docs/videos/previews/book.png)](docs/videos/book.mp4)
 
 [Open the book pose estimation video](docs/videos/book.mp4)
 
 ### Multi-Bottle 3D Grasping
 
-[![Dobot grasping multiple bottles](docs/videos/previews/grab.jpg)](docs/videos/grab.mp4)
+[![Dobot grasping multiple bottles](docs/videos/previews/grab.png)](docs/videos/grab.mp4)
 
 [Open the multi-bottle grasping video](docs/videos/grab.mp4)
 
@@ -217,4 +217,3 @@ This project builds on:
 - [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)
 - [Dobot ROS 2 V4](https://github.com/Dobot-Arm/DOBOT_6Axis_ROS2_V4)
 - Intel RealSense SDK
-
