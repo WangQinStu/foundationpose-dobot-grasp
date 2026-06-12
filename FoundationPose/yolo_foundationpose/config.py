@@ -8,9 +8,9 @@ code_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 def parse_args():
   parser = argparse.ArgumentParser()
 
-  parser.add_argument('--mesh_file', type=str, default=f'{code_dir}/yolo26/mesh/bottle_cad2.obj',
+  parser.add_argument('--mesh_file', type=str, default=f'{code_dir}/yolo_foundationpose/assets/mesh/bottle_cad2.obj',
                       help='目标物体的 3D mesh 文件，FoundationPose 用它渲染候选位姿并估计 6D pose。')
-  parser.add_argument('--yolo_weights', type=str, default=f'{code_dir}/yolo26/weight/best_1.pt',
+  parser.add_argument('--yolo_weights', type=str, default=f'{code_dir}/yolo_foundationpose/assets/weights/best_1.pt',
                       help='YOLO 分割模型权重路径，用于从 RealSense 彩色图中分割目标。')
   parser.add_argument('--target_cls_id', type=int, default=None,
                       help='只选择指定 YOLO 类别 id；None 表示不限制类别。')
@@ -165,6 +165,12 @@ def parse_args():
 
   parser.add_argument('--depth_isolation_weight', type=float, default=0.25,
                       help='目标选择评分中，深度孤立程度的权重。')
+  parser.add_argument('--prefer_foreground_target', type=int, default=1,
+                      help='多瓶场景下是否优先选择最靠近相机的前景瓶子；1 开启，0 关闭。')
+  parser.add_argument('--foreground_depth_window', type=float, default=0.06,
+                      help='前景目标深度窗口，单位米；只在最浅候选加该窗口以内的瓶子中按综合评分选择。')
+  parser.add_argument('--foreground_switch_depth', type=float, default=0.06,
+                      help='锁定深处目标时，若新候选比当前锁定目标近超过该值，则自动切换到前景目标；单位米，0 表示关闭。')
   parser.add_argument('--isolation_ring_kernel', type=int, default=45,
                       help='计算深度孤立程度时，目标周围环形区域的核大小。')
   parser.add_argument('--isolation_depth_band', type=float, default=0.08,
@@ -236,7 +242,7 @@ def parse_args():
   parser.add_argument('--dobot_use_object_orientation', type=int, default=0,
                       help='1 表示发布物体姿态作为 TCP 姿态；0 表示使用 dobot_grasp_quat_xyzw 固定抓取姿态。')
   parser.add_argument('--dobot_grasp_orientation_mode', type=str, default='fixed',
-                      help='夹爪姿态模式：fixed 使用固定姿态；object 使用完整物体姿态；planar 保持固定下探姿态，仅绕 TCP 轴对齐物体长轴。')
+                      help='夹爪姿态模式：fixed 使用固定姿态；object 使用完整物体姿态；planar 保持固定下探姿态，仅绕 TCP 轴对齐物体长轴；3d 让夹爪开口轴对齐物体 3D 长轴并自动选择接近方向。')
   parser.add_argument('--dobot_grasp_quat_xyzw', type=str,
                       default='0.011411472351837162,0.0016656594789129023,0.03427464789428714,0.99934591227912',
                       help='固定 TCP 抓取姿态四元数 qx,qy,qz,qw；dobot_use_object_orientation=0 时使用。')

@@ -22,10 +22,10 @@
 python run_realsense_yolo_foundationpose.py
 ```
 
-常用资源仍放在：
+常用资源放在：
 
-- `yolo26/mesh/`: 物体 mesh。
-- `yolo26/weight/`: YOLO 权重。
+- `yolo_foundationpose/assets/mesh/`: 当前在线抓取使用的物体 mesh。
+- `yolo_foundationpose/assets/weights/`: 当前在线抓取使用的 YOLO 权重。
 - `debug/realsense_yolo/`: 运行输出和可选保存的位姿。
 
 ## 目标切换相关参数
@@ -34,6 +34,9 @@ python run_realsense_yolo_foundationpose.py
 - `--lock_switch_after_lost`: 原锁定瓶子连续丢失多少帧后，才允许切换到当前 YOLO 最优目标。
 - `--lock_switch_on_miss`: 原锁定瓶子连续丢失达到阈值后，是否切换到当前 YOLO 最优目标，并重置 FoundationPose。
 - `--follow_yolo_best`: 是否让当前 YOLO 最优目标优先驱动锁定目标；默认关闭，避免 YOLO 分数跳变导致频繁换瓶子。
+- `--prefer_foreground_target`: 多瓶堆叠时是否优先选择离相机最近、最表面的瓶子；默认开启。
+- `--foreground_depth_window`: 前景深度窗口，默认 `0.06m`。视觉会先找最浅候选瓶子，只在比它深不超过该窗口的候选里继续按综合分数选择。
+- `--foreground_switch_depth`: 已锁定深处瓶子时，如果新候选比当前目标近超过该值，自动切换到前景目标并重置 FoundationPose；默认 `0.06m`。
 - `--pose_min_projected_iou`: FoundationPose 3D 框投影和 YOLO 2D 框的最小重叠，用于过滤漂移位姿。
 - `--track_between_yolo`: YOLO 间隔帧是否继续调用 FoundationPose track；默认关闭，避免没有新 mask 时把位姿越跟越偏。
 
@@ -130,7 +133,7 @@ python3 run_realsense_yolo_foundationpose.py \
 
 ```bash
 --dobot_grasp_offset_obj 0,0.0675,0
---dobot_tcp_to_tip 0,0,0.14
+--dobot_tcp_to_tip 0,0,0.20
 --dobot_grasp_orientation_mode fixed
 --dobot_grasp_quat_xyzw qx,qy,qz,qw
 --dobot_grasp_object_axis_obj 0,1,0
@@ -144,6 +147,14 @@ python3 run_realsense_yolo_foundationpose.py \
 当前默认瓶子模型 `bottle_cad2.obj` 的高度轴是物体坐标系 `Y`，几何中心约在 `Y=0.0675m`，所以默认 `--dobot_grasp_offset_obj 0,0.0675,0` 会把抓取点从瓶底附近移动到瓶身中心附近。
 
 默认使用 `--dobot_grasp_orientation_mode fixed`：优先使用已验证过的固定 TCP 抓取姿态，避免视觉估计出的瓶身方向把腕部转到 Dobot 控制器拒绝的角度。若后续确认控制器能接受随瓶身方向变化的腕部姿态，再临时改成 `planar`。`planar` 会保持固定下探轴，只绕该轴旋转夹爪，把 `--dobot_grasp_reference_axis_tcp` 指定的 TCP 局部轴对齐到 `--dobot_grasp_object_axis_obj` 指定的瓶身长轴投影方向；若发现夹爪开口方向和瓶身差 90 度，把 `--dobot_grasp_reference_axis_tcp 1,0,0` 改成 `0,1,0`。
+
+堆叠或倾斜瓶子需要 3D 姿态时，视觉端使用：
+
+```bash
+--dobot_grasp_orientation_mode 3d
+```
+
+`3d` 模式会让夹爪参考轴对齐瓶子的 3D 长轴，并自动选择一个垂直于瓶身、且尽量接近固定抓取姿态的接近方向。默认可以直接抓取，不需要预抓取点；如果后续现场确实需要避障，再在 ROS 运控端单独设置 `pre_grasp_height`。
 
 如果只是桌面测试 topic 连通性，可以临时加 `--dobot_allow_identity_handeye`；真实机械臂抓取不要用单位外参。
 

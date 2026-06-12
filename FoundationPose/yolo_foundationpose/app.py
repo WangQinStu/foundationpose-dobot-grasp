@@ -4,7 +4,6 @@ import numpy as np
 from ultralytics import YOLO
 
 from estimater import set_logging_format, set_seed
-from yolo26.target_selector import BottleTargetSelector
 from yolo_foundationpose.camera import create_realsense_pipeline, get_aligned_frame
 from yolo_foundationpose.compat import patch_torch_load_for_old_ultralytics
 from yolo_foundationpose.dobot_bridge import build_dobot_target_bridge
@@ -13,6 +12,7 @@ from yolo_foundationpose.geometry import bbox_center, pose_matches_detection
 from yolo_foundationpose.masks import mask_foundationpose_inputs, refine_mask_for_pose
 from yolo_foundationpose.pose_refiner import build_pose_refiner
 from yolo_foundationpose.ros_pose_publisher import build_ros_pose_publisher
+from yolo_foundationpose.target_selector import BottleTargetSelector
 from yolo_foundationpose.target_lock import TargetLock
 from yolo_foundationpose.visualization import colorize_depth, draw_pose_axes, draw_pose_overlay, draw_score_panel
 
@@ -50,7 +50,9 @@ def create_selector(args):
                               depth_isolation_weight=args.depth_isolation_weight,
                               isolation_ring_kernel=args.isolation_ring_kernel,
                               isolation_depth_band=args.isolation_depth_band,
-                              max_interference_ratio=args.max_interference_ratio)
+                              max_interference_ratio=args.max_interference_ratio,
+                              prefer_foreground=bool(args.prefer_foreground_target),
+                              foreground_depth_window=args.foreground_depth_window)
 
 
 def reset_pose(est):
@@ -169,7 +171,8 @@ def run(args):
                            min_iou=args.lock_min_iou,
                            max_center_ratio=args.lock_max_center_ratio,
                            switch_on_miss=bool(args.lock_switch_on_miss),
-                           follow_yolo_best=bool(args.follow_yolo_best))
+                           follow_yolo_best=bool(args.follow_yolo_best),
+                           foreground_switch_depth=args.foreground_switch_depth)
 
   ros_pose_publisher = build_ros_pose_publisher(args)
   dobot_bridge = build_dobot_target_bridge(args)

@@ -65,6 +65,11 @@ def draw_score_panel(H, best, pose_ready, fps, refine_info=None):
       f'interf: {detail.get("depth_interference_ratio", 0.0):.3f}',
       f'median_depth: {detail["median_depth"]}',
     ])
+    if detail.get('foreground_front_depth') is not None:
+      lines.extend([
+        f'front_depth: {detail["foreground_front_depth"]:.3f}',
+        f'front_delta: {detail.get("foreground_depth_delta", 0.0):.3f}',
+      ])
 
   y = 28
   for line in lines:

@@ -103,7 +103,12 @@ set_logging_format()
 
 def make_mesh_tensors(mesh, device='cuda', max_tex_size=None):
   mesh_tensors = {}
-  if isinstance(mesh.visual, trimesh.visual.texture.TextureVisuals):
+  has_texture = (
+    isinstance(mesh.visual, trimesh.visual.texture.TextureVisuals)
+    and getattr(mesh.visual, 'uv', None) is not None
+    and getattr(getattr(mesh.visual, 'material', None), 'image', None) is not None
+  )
+  if has_texture:
     img = np.array(mesh.visual.material.image.convert('RGB'))
     img = img[...,:3]
     if max_tex_size is not None:
@@ -117,6 +122,8 @@ def make_mesh_tensors(mesh, device='cuda', max_tex_size=None):
     uv[:,1] = 1 - uv[:,1]
     mesh_tensors['uv']  = uv
   else:
+    if isinstance(mesh.visual, trimesh.visual.texture.TextureVisuals):
+      logging.info("WARN: mesh has texture material but no UV/image, falling back to vertex color")
     if mesh.visual.vertex_colors is None:
       logging.info(f"WARN: mesh doesn't have vertex_colors, assigning a pure color")
       mesh.visual.vertex_colors = np.tile(np.array([128,128,128]).reshape(1,3), (len(mesh.vertices), 1))

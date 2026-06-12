@@ -5,7 +5,8 @@ from yolo_foundationpose.geometry import bbox_center, bbox_iou
 
 class TargetLock:
   def __init__(self, selector, max_lost=30, switch_after_lost=12, min_iou=0.03,
-               max_center_ratio=0.65, switch_on_miss=True, follow_yolo_best=False):
+               max_center_ratio=0.65, switch_on_miss=True, follow_yolo_best=False,
+               foreground_switch_depth=0.06):
     self.selector = selector
     self.max_lost = max_lost
     self.switch_after_lost = switch_after_lost
@@ -13,6 +14,7 @@ class TargetLock:
     self.max_center_ratio = max_center_ratio
     self.switch_on_miss = switch_on_miss
     self.follow_yolo_best = follow_yolo_best
+    self.foreground_switch_depth = foreground_switch_depth
     self.locked_bbox = None
     self.locked_depth = None
     self.locked_index = None
@@ -65,8 +67,17 @@ class TargetLock:
       cand = selected['candidate']
       selected['lock_switched'] = False
     else:
+      raw_cand = raw_best['candidate']
+      raw_depth = raw_cand.score_detail.get('median_depth')
+      if (
+          self.foreground_switch_depth > 0
+          and self.locked_depth is not None
+          and raw_depth is not None
+          and raw_cand.index != self.locked_index
+          and raw_depth + self.foreground_switch_depth < self.locked_depth):
+        return self._start_new_lock(raw_best)
+
       if self.follow_yolo_best:
-        raw_cand = raw_best['candidate']
         score,iou,center_dist = self._match_score(raw_cand)
         if raw_cand.index != self.locked_index and iou < self.min_iou and center_dist > self.max_center_ratio:
           return self._start_new_lock(raw_best)

@@ -79,6 +79,19 @@ def _signed_angle_about_axis(src, dst, axis):
   return float(np.arctan2(sin_value, cos_value))
 
 
+def _basis_from_reference_and_approach(reference_axis, approach_axis):
+  reference_axis = _normalized(reference_axis, [1, 0, 0])
+  approach_axis = _project_to_plane(approach_axis, reference_axis)
+  if np.linalg.norm(approach_axis) < 1e-6:
+    approach_axis = _project_to_plane([0, 0, 1], reference_axis)
+  if np.linalg.norm(approach_axis) < 1e-6:
+    approach_axis = _project_to_plane([0, 1, 0], reference_axis)
+  approach_axis = _normalized(approach_axis, [0, 0, 1])
+  side_axis = _normalized(np.cross(approach_axis, reference_axis), [0, 1, 0])
+  approach_axis = _normalized(np.cross(reference_axis, side_axis), [0, 0, 1])
+  return np.column_stack([reference_axis, side_axis, approach_axis])
+
+
 class DobotTargetBridge:
   """UDP bridge for conda FoundationPose -> ROS 2 Dobot.
 
@@ -197,12 +210,39 @@ class DobotTargetBridge:
     grasp_rotation = delta_rotation @ fixed_rotation
     return Rotation.from_matrix(grasp_rotation).as_quat(), float(np.degrees(angle))
 
+  def _grasp_3d_quat(self, ob_in_base):
+    fixed_rotation = Rotation.from_quat(self.fixed_quat_xyzw).as_matrix()
+    fixed_approach_base = fixed_rotation @ _normalized(self.tcp_to_tip, [0, 0, 1])
+    fixed_reference_base = fixed_rotation @ self.reference_axis_tcp
+    object_axis_base = _normalized(ob_in_base[:3, :3] @ self.object_axis_obj, [0, 1, 0])
+
+    # The bottle long axis is bidirectional for grasping. Pick the sign that
+    # keeps the wrist closest to the known-good fixed grasp orientation.
+    if np.dot(object_axis_base, fixed_reference_base) < 0:
+      object_axis_base = -object_axis_base
+
+    approach_axis_base = _project_to_plane(fixed_approach_base, object_axis_base)
+    if np.linalg.norm(approach_axis_base) < 1e-6:
+      approach_axis_base = _project_to_plane(ob_in_base[:3, :3] @ [0, 0, 1], object_axis_base)
+    approach_axis_base = _normalized(approach_axis_base, fixed_approach_base)
+
+    tcp_basis = _basis_from_reference_and_approach(
+      self.reference_axis_tcp,
+      _normalized(self.tcp_to_tip, [0, 0, 1]),
+    )
+    base_basis = _basis_from_reference_and_approach(object_axis_base, approach_axis_base)
+    grasp_rotation = base_basis @ tcp_basis.T
+    tilt_angle = np.degrees(
+      np.arccos(np.clip(np.dot(_normalized(fixed_approach_base, [0, 0, 1]), approach_axis_base), -1.0, 1.0))
+    )
+    return Rotation.from_matrix(grasp_rotation).as_quat(), float(tilt_angle)
+
   def _make_target_pose(self, ob_in_cam):
     ob_in_cam = np.asarray(ob_in_cam, dtype=np.float64).reshape(4, 4)
     if self.eye_in_hand:
       if self.base_T_gripper is None:
         self.last_publish_reason = 'waiting current gripper pose from UDP status bridge'
-        return None, None
+        return None, None, None
       base_T_cam = self.base_T_gripper @ self.gripper_T_cam
     else:
       base_T_cam = self.base_T_cam
@@ -213,6 +253,8 @@ class DobotTargetBridge:
     planar_angle_deg = None
     if self.orientation_mode == 'object':
       quat_xyzw = Rotation.from_matrix(ob_in_base[:3, :3]).as_quat()
+    elif self.orientation_mode in ('3d', 'three_d', 'spatial'):
+      quat_xyzw, planar_angle_deg = self._grasp_3d_quat(ob_in_base)
     elif self.orientation_mode == 'planar':
       quat_xyzw, planar_angle_deg = self._planar_grasp_quat(ob_in_base)
     else:

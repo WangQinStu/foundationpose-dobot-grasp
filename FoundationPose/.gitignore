@@ -156,3 +156,11 @@ data/
 logs/
 !BundleTrack/XMem/inference/data
 run_used.yml
+
+# Runtime assets for the integrated YOLO + FoundationPose bottle pipeline.
+# These exceptions must stay after the generic weights/ and *.pth rules above.
+!yolo_foundationpose/assets/
+!yolo_foundationpose/assets/mesh/
+!yolo_foundationpose/assets/mesh/**
+!yolo_foundationpose/assets/weights/
+!yolo_foundationpose/assets/weights/**
