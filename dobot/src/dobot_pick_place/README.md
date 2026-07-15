@@ -138,11 +138,69 @@ ros2 topic pub --once /motor_control step_motor/msg/Motor "{id: 1, speed: 500, d
 ros2 launch dobot_pick_place target_pose_gripper.launch.py grasp_z_offset:=0.02
 ```
 
+如果视觉端使用 `--dobot_grasp_orientation_mode 3d` 做倾斜瓶子或堆叠瓶子的抓取，默认可以直接抓取，不需要预抓取点：
+
+```bash
+ros2 launch dobot_pick_place target_pose_gripper.launch.py \
+  pre_grasp_height:=0.0
+```
+
+如果机械臂已经由 bringup 或示教器使能，但自动初始化服务响应很慢，可以跳过初始化链路，收到视觉目标后直接发运动：
+
+```bash
+ros2 launch dobot_pick_place target_pose_gripper.launch.py \
+  pre_grasp_height:=0.0 \
+  auto_initialize_robot:=false
+```
+
+只有在现场确认需要避障时，再打开 TCP 方向预抓取：
+
+```bash
+ros2 launch dobot_pick_place target_pose_gripper.launch.py \
+  pre_grasp_height:=0.06 \
+  pre_grasp_along_tcp:=true \
+  pre_grasp_axis_tcp:=0,0,-1
+```
+
+`pre_grasp_along_tcp=true` 时，`pre_grasp_height` 不再表示固定向上抬高，而是沿目标 TCP 姿态下的 `pre_grasp_axis_tcp` 反方向后退。
+
+现场测试发现当前夹爪固件可以响应相对角度模式 `mode=2`，但不响应说明书里的绝对角度模式 `mode=4`。因此节点默认使用相对模式张开，并在短时间后自动发布停止命令，避免夹爪到机械限位后持续堵转蜂鸣：
+
+```bash
+ros2 launch dobot_pick_place target_pose_gripper.launch.py \
+  gripper_open_mode:=2 \
+  gripper_open_angle:=9000 \
+  gripper_open_duration:=1.0 \
+  gripper_prepare_open_before_pick:=true \
+  gripper_force_open_before_pick:=true \
+  gripper_prepare_delay:=2.0
+```
+
+`gripper_open_duration` 控制相对张开命令运行多久后停止；若仍然顶到最大开口蜂鸣，把它调小，例如 `0.6`。`gripper_prepare_delay` 必须大于夹爪实际张开到位的时间。若现场仍看到夹爪还没张开机械臂就开始下探，把它继续调大，例如 `3.0`。
+
+默认抓取流程会直接尝试视觉端给出的抓取 TCP 点，不额外插入预抓取高度，也不再把闭合点抬高。这样能先避免控制器拒绝额外的高位预抓取点。若现场确认上方点可达，再手动开启下面参数做腕部姿态预对齐：
+
+```bash
+ros2 launch dobot_pick_place target_pose_gripper.launch.py \
+  orientation_align_before_pick:=true \
+  orientation_align_angle_threshold:=0.0 \
+  orientation_align_pre_grasp_height:=0.08 \
+  orientation_align_use_movj:=true \
+  orientation_align_fallback_to_movl:=true \
+  speed_factor:=60
+```
+
+`orientation_align_angle_threshold:=0.0` 表示默认每次抓取都走上方 `MovJ` 预对齐。若控制器拒绝某个 `MovJ` 预对齐点，`orientation_align_fallback_to_movl:=true` 会改用 `MovL` 到同一个上方预抓取点，而不是直接停止流程。若上方空间不够，把 `orientation_align_pre_grasp_height` 调小一些；若现场速度仍偏慢，可以继续提高 `speed_factor`，但要先确认路径周围无遮挡。
+
 如果夹取力度仍然不够，可以继续增大闭合角度；如果夹得过紧，可以调小：
 
 ```bash
-ros2 launch dobot_pick_place target_pose_gripper.launch.py gripper_close_angle:=38000
+ros2 launch dobot_pick_place target_pose_gripper.launch.py \
+  gripper_close_angle:=38000 \
+  gripper_close_duration:=1.2
 ```
+
+闭合使用相对角度模式夹紧瓶子，但节点会在 `gripper_close_duration` 秒后自动发布停止命令，避免夹爪到机械限位后持续堵转蜂鸣。若仍然蜂鸣，优先减小 `gripper_close_angle` 或缩短 `gripper_close_duration`。
 
 ## 抓取后放入箱子
 

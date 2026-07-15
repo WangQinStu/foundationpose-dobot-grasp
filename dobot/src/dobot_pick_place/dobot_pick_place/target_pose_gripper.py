@@ -103,11 +103,14 @@ class TargetPoseGripper(Node):
         self.robot_is_connected = False
         self.pending_pick_pose: Optional[PoseStamped] = None
         self.active_target_pose: Optional[PoseStamped] = None
+        self.pick_orientation_fallback_used = False
         self.gripper_closed_for_target = False
         self.intermediate_reached = False
         self.place_reached = False
         self.camera_reached = False
         self.motion_stage = 'idle'
+        self.connection_wait_started_at = 0.0
+        self.connection_wait_timer = None
         self.enable_wait_started_at = 0.0
         self.enable_wait_timer = None
         self.gripper_stop_timer = None
@@ -148,11 +151,21 @@ class TargetPoseGripper(Node):
         self.declare_parameter('ignore_speed_factor_failure', True)
         self.declare_parameter('fallback_to_movj', True)
         self.declare_parameter('speed_factor', 30)
+        self.declare_parameter('wait_for_robot_connection', True)
+        self.declare_parameter('connection_wait_timeout', 15.0)
         self.declare_parameter('trust_enable_service_response', True)
         self.declare_parameter('enable_wait_timeout', 8.0)
         self.declare_parameter('grasp_z_offset', 0.0)
         self.declare_parameter('pre_grasp_height', 0.0)
-        self.declare_parameter('gripper_close_distance', 0.03)
+        self.declare_parameter('pre_grasp_along_tcp', True)
+        self.declare_parameter('pre_grasp_axis_tcp', '0,0,-1')
+        self.declare_parameter('fallback_to_pick_when_pre_grasp_rejected', True)
+        self.declare_parameter('fallback_pick_orientation_on_reject', True)
+        self.declare_parameter(
+            'fallback_pick_quat_xyzw',
+            '0.011411472351837162,0.0016656594789129023,0.03427464789428714,0.99934591227912',
+        )
+        self.declare_parameter('gripper_close_distance', 0.008)
         self.declare_parameter('place_after_grasp', False)
         self.declare_parameter('intermediate_pose', '')
         self.declare_parameter('place_pose', '')
@@ -174,7 +187,7 @@ class TargetPoseGripper(Node):
         self.declare_parameter('gripper_sub_divide', 32)
         self.declare_parameter('gripper_close_duration', 0.0)
         self.declare_parameter('gripper_open_on_start', True)
-        self.declare_parameter('pick_close_timeout', 5.0)
+        self.declare_parameter('pick_close_timeout', 0.0)
 
     def _read_parameters(self) -> None:
         self.target_pose_topic = self.get_parameter('target_pose_topic').value
@@ -196,12 +209,31 @@ class TargetPoseGripper(Node):
         self.position_scale = float(self.get_parameter('position_scale').value)
         self.movl_param_value = list(self.get_parameter('movl_param_value').value)
         self.auto_initialize_robot = bool(self.get_parameter('auto_initialize_robot').value)
+        self.wait_for_robot_connection = self._parse_bool_parameter(
+            self.get_parameter('wait_for_robot_connection').value
+        )
+        self.connection_wait_timeout = float(self.get_parameter('connection_wait_timeout').value)
         self.trust_enable_service_response = self._parse_bool_parameter(
             self.get_parameter('trust_enable_service_response').value
         )
         self.enable_wait_timeout = float(self.get_parameter('enable_wait_timeout').value)
         self.grasp_z_offset = float(self.get_parameter('grasp_z_offset').value)
         self.pre_grasp_height = float(self.get_parameter('pre_grasp_height').value)
+        self.pre_grasp_along_tcp = self._parse_bool_parameter(self.get_parameter('pre_grasp_along_tcp').value)
+        self.pre_grasp_axis_tcp = self._parse_vector_parameter(
+            str(self.get_parameter('pre_grasp_axis_tcp').value),
+            'pre_grasp_axis_tcp',
+        )
+        self.fallback_to_pick_when_pre_grasp_rejected = self._parse_bool_parameter(
+            self.get_parameter('fallback_to_pick_when_pre_grasp_rejected').value
+        )
+        self.fallback_pick_orientation_on_reject = self._parse_bool_parameter(
+            self.get_parameter('fallback_pick_orientation_on_reject').value
+        )
+        self.fallback_pick_quat_xyzw = self._parse_vector4_parameter(
+            str(self.get_parameter('fallback_pick_quat_xyzw').value),
+            'fallback_pick_quat_xyzw',
+        )
         self.gripper_close_distance = float(self.get_parameter('gripper_close_distance').value)
         self.place_after_grasp = self._parse_bool_parameter(self.get_parameter('place_after_grasp').value)
         self.transfer_arrival_distance = float(self.get_parameter('transfer_arrival_distance').value)
@@ -224,8 +256,19 @@ class TargetPoseGripper(Node):
 
     def robot_status_callback(self, msg: RobotStatus) -> None:
         # 不直接相信 service 返回值；以实时状态 topic 判断机械臂是否真的使能。
+        was_connected = self.robot_is_connected
         self.robot_is_enable = bool(msg.is_enable)
         self.robot_is_connected = bool(msg.is_connected)
+        if self.robot_is_connected and not was_connected:
+            self.get_logger().info('RobotStatus 显示机械臂 TCP 已连接。')
+            if self.busy and self.pending_pick_pose is not None and self.connection_wait_timer is not None:
+                self.cancel_connection_wait()
+                self.start_pending_motion()
+        elif was_connected and not self.robot_is_connected:
+            self.robot_ready = False
+            self.get_logger().error('机械臂 TCP 连接已断开，后续运动指令将停止发送。')
+            if self.busy:
+                self.finish_motion('抓取过程中机械臂 TCP 连接断开，已停止当前流程。')
 
     def current_pose_callback(self, msg: PoseStamped) -> None:
         if self.active_target_pose is None:
@@ -303,6 +346,7 @@ class TargetPoseGripper(Node):
         pick_pose = self._copy_pose_with_offset(msg, z_offset=self.grasp_z_offset)
         self.active_target_pose = pick_pose
         self.gripper_closed_for_target = False
+        self.pick_orientation_fallback_used = False
         self.intermediate_reached = False
         self.place_reached = False
         self.camera_reached = False
@@ -324,12 +368,58 @@ class TargetPoseGripper(Node):
             self.finish_motion('return_to_camera_after_place=true，但 camera_pose 为空。')
             return
 
+        if not self.robot_is_connected:
+            if not self.wait_for_robot_connection:
+                self.finish_motion(
+                    '机械臂 TCP 未连接，拒绝发送运动指令。请检查 IP、网线和 RobotStatus.is_connected。'
+                )
+                return
+            self.connection_wait_started_at = time.monotonic()
+            self.connection_wait_timer = self.create_timer(0.2, self.check_robot_connection)
+            self.get_logger().warn(
+                f'机械臂 TCP 尚未连接，最多等待 {self.connection_wait_timeout:.1f} 秒；'
+                '连接成功后再执行抓取。'
+            )
+            return
+
+        self.start_pending_motion()
+
+    def start_pending_motion(self) -> None:
+        if not self.busy or self.pending_pick_pose is None:
+            return
+        if not self.robot_is_connected:
+            self.finish_motion(
+                '机械臂 TCP 未连接，拒绝发送运动指令。请检查 IP、网线和 RobotStatus.is_connected。'
+            )
+            return
         if self.auto_initialize_robot and not self.robot_ready:
             self.initialize_robot()
         else:
             self.send_pending_movl()
 
+    def check_robot_connection(self) -> None:
+        if self.robot_is_connected:
+            self.cancel_connection_wait()
+            self.start_pending_motion()
+            return
+
+        if time.monotonic() - self.connection_wait_started_at >= self.connection_wait_timeout:
+            self.cancel_connection_wait()
+            self.finish_motion(
+                '等待机械臂 TCP 连接超时。当前控制器不可达，请检查 IP_address、'
+                '电脑有线网卡地址、网线和控制器电源。'
+            )
+
+    def cancel_connection_wait(self) -> None:
+        if self.connection_wait_timer is not None:
+            self.connection_wait_timer.cancel()
+            self.connection_wait_timer = None
+
     def initialize_robot(self) -> None:
+        if not self.robot_is_connected:
+            self.robot_ready = False
+            self.finish_motion('机械臂 TCP 未连接，不能执行 RequestControl。')
+            return
         if self.robot_is_connected and self.robot_is_enable:
             self.get_logger().info('RobotStatus 已连接且已使能，跳过 RequestControl/PowerOn/EnableRobot，直接设置速度。')
             self.send_speed_factor()
@@ -348,6 +438,10 @@ class TargetPoseGripper(Node):
 
     def on_request_control_done(self, ok: bool) -> None:
         if not ok:
+            if not self.robot_is_connected:
+                self.robot_ready = False
+                self.finish_motion('RequestControl 失败：机械臂 TCP 已断开。')
+                return
             if self.robot_is_connected and self.robot_is_enable:
                 self.get_logger().warn(
                     'RequestControl 返回失败，但 RobotStatus 显示已连接且已使能，继续设置速度并执行运动。'
@@ -433,12 +527,20 @@ class TargetPoseGripper(Node):
             self.finish_motion('等待机械臂使能超时，请检查 RobotStatus/is_enable。')
 
     def send_speed_factor(self) -> None:
+        if not self.robot_is_connected:
+            self.robot_ready = False
+            self.finish_motion('机械臂 TCP 已断开，不能设置 SpeedFactor。')
+            return
         request = SpeedFactor.Request()
         request.ratio = int(self.get_parameter('speed_factor').value)
         self._call_simple_service(self.speed_factor_client, request, 'SpeedFactor', self.on_speed_factor_done)
 
     def on_speed_factor_done(self, ok: bool) -> None:
         if not ok:
+            if not self.robot_is_connected:
+                self.robot_ready = False
+                self.finish_motion('SpeedFactor 失败：机械臂 TCP 已断开。')
+                return
             if self._parse_bool_parameter(self.get_parameter('ignore_speed_factor_failure').value):
                 self.get_logger().warn(
                     'SpeedFactor 返回失败，但 ignore_speed_factor_failure=true，继续执行运动。'
@@ -457,7 +559,17 @@ class TargetPoseGripper(Node):
             return
 
         if self.pre_grasp_height > 0.0:
-            pre_grasp_pose = self._copy_pose_with_offset(self.pending_pick_pose, z_offset=self.pre_grasp_height)
+            if self.pre_grasp_along_tcp:
+                pre_grasp_pose = self._copy_pose_back_along_tcp(
+                    self.pending_pick_pose,
+                    distance=self.pre_grasp_height,
+                    axis_tcp=self.pre_grasp_axis_tcp,
+                )
+            else:
+                pre_grasp_pose = self._copy_pose_with_offset(
+                    self.pending_pick_pose,
+                    z_offset=self.pre_grasp_height,
+                )
             self.send_pose_movl(pre_grasp_pose, '预抓取点', 'to_pre_grasp')
             return
 
@@ -512,6 +624,65 @@ class TargetPoseGripper(Node):
         copied.pose.position.z = msg.pose.position.z + z_offset
         copied.pose.orientation = msg.pose.orientation
         return copied
+
+    @staticmethod
+    def _copy_pose_with_orientation(
+        msg: PoseStamped,
+        quat_xyzw: tuple[float, float, float, float],
+    ) -> PoseStamped:
+        copied = PoseStamped()
+        copied.header = msg.header
+        copied.pose.position.x = msg.pose.position.x
+        copied.pose.position.y = msg.pose.position.y
+        copied.pose.position.z = msg.pose.position.z
+        copied.pose.orientation.x = quat_xyzw[0]
+        copied.pose.orientation.y = quat_xyzw[1]
+        copied.pose.orientation.z = quat_xyzw[2]
+        copied.pose.orientation.w = quat_xyzw[3]
+        return copied
+
+    @classmethod
+    def _copy_pose_back_along_tcp(
+        cls,
+        msg: PoseStamped,
+        distance: float,
+        axis_tcp: tuple[float, float, float],
+    ) -> PoseStamped:
+        axis_base = cls._rotate_vector_by_quaternion(axis_tcp, msg.pose.orientation)
+        norm = math.sqrt(sum(component * component for component in axis_base))
+        if norm < 1e-9:
+            axis_base = (0.0, 0.0, 1.0)
+            norm = 1.0
+        axis_base = tuple(component / norm for component in axis_base)
+
+        copied = PoseStamped()
+        copied.header = msg.header
+        copied.pose.position.x = msg.pose.position.x - axis_base[0] * distance
+        copied.pose.position.y = msg.pose.position.y - axis_base[1] * distance
+        copied.pose.position.z = msg.pose.position.z - axis_base[2] * distance
+        copied.pose.orientation = msg.pose.orientation
+        return copied
+
+    @staticmethod
+    def _rotate_vector_by_quaternion(
+        vector: tuple[float, float, float],
+        q: Quaternion,
+    ) -> tuple[float, float, float]:
+        x, y, z = vector
+        qx = q.x
+        qy = q.y
+        qz = q.z
+        qw = q.w
+
+        # v' = v + 2*qw*(q_xyz x v) + 2*(q_xyz x (q_xyz x v))
+        tx = 2.0 * (qy * z - qz * y)
+        ty = 2.0 * (qz * x - qx * z)
+        tz = 2.0 * (qx * y - qy * x)
+        return (
+            x + qw * tx + (qy * tz - qz * ty),
+            y + qw * ty + (qz * tx - qx * tz),
+            z + qw * tz + (qx * ty - qy * tx),
+        )
 
     def publish_gripper_close(self) -> None:
         command = Motor()
@@ -591,6 +762,10 @@ class TargetPoseGripper(Node):
         if pose is None:
             self.finish_motion(f'{label}为空，无法继续。')
             return
+        if not self.robot_is_connected:
+            self.robot_ready = False
+            self.finish_motion(f'机械臂 TCP 已断开，未发送 MovL {label}。')
+            return
 
         self.set_motion_stage(stage)
         self.active_target_pose = pose
@@ -613,6 +788,10 @@ class TargetPoseGripper(Node):
         )
 
     def send_pose_movj(self, pose: PoseStamped, label: str, stage: str) -> None:
+        if not self.robot_is_connected:
+            self.robot_ready = False
+            self.finish_motion(f'机械臂 TCP 已断开，未发送 MovJ {label}。')
+            return
         if not self._wait_for_service(self.movj_client, self.movj_service):
             self.finish_motion(f'{self.movj_service} 服务不可用，无法执行 MovJ 兜底。')
             return
@@ -658,6 +837,10 @@ class TargetPoseGripper(Node):
             f'{motion_name} 返回: res={response.res}, robot_return="{response.robot_return}"'
         )
         if response.res != 0:
+            if not self.robot_is_connected:
+                self.robot_ready = False
+                self.finish_motion(f'{motion_name} {label} 失败：机械臂 TCP 已断开。')
+                return
             if (
                 fallback_allowed
                 and self._parse_bool_parameter(self.get_parameter('fallback_to_movj').value)
@@ -666,6 +849,27 @@ class TargetPoseGripper(Node):
                     f'{motion_name} {label} 被控制器拒绝，改用 MovJ 点到点运动兜底。'
                 )
                 self.send_pose_movj(pose, label, stage)
+                return
+            if stage == 'to_pre_grasp' and self.fallback_to_pick_when_pre_grasp_rejected:
+                self.get_logger().warn(
+                    f'{motion_name} 预抓取点被控制器拒绝，跳过预抓取点，直接尝试抓取点。'
+                )
+                self.send_pose_movl(self.pending_pick_pose, '抓取点', 'picking')
+                return
+            if (
+                stage == 'picking'
+                and self.fallback_pick_orientation_on_reject
+                and not self.pick_orientation_fallback_used
+            ):
+                self.pick_orientation_fallback_used = True
+                fallback_pose = self._copy_pose_with_orientation(pose, self.fallback_pick_quat_xyzw)
+                self.pending_pick_pose = fallback_pose
+                self.active_target_pose = fallback_pose
+                self.get_logger().warn(
+                    f'{motion_name} 抓取点 3D 姿态被控制器拒绝，保持 xyz 不变，'
+                    '改用固定抓取姿态再试一次。'
+                )
+                self.send_pose_movl(fallback_pose, '抓取点姿态兜底', 'picking')
                 return
             self.finish_motion(f'{motion_name} {label} 未成功，停止当前流程。')
             return
@@ -738,6 +942,7 @@ class TargetPoseGripper(Node):
         return False
 
     def finish_motion(self, reason: str) -> None:
+        self.cancel_connection_wait()
         self.busy = False
         self.pending_pick_pose = None
         self.active_target_pose = None
@@ -749,6 +954,7 @@ class TargetPoseGripper(Node):
         self.get_logger().error(reason)
 
     def finish_sequence(self) -> None:
+        self.cancel_connection_wait()
         self.busy = False
         self.pending_pick_pose = None
         self.active_target_pose = None
@@ -785,6 +991,30 @@ class TargetPoseGripper(Node):
         msg.pose.orientation.z = numbers[5]
         msg.pose.orientation.w = numbers[6]
         return msg
+
+    @staticmethod
+    def _parse_vector_parameter(value: str, name: str) -> tuple[float, float, float]:
+        parts = [part.strip() for part in value.replace(';', ',').split(',') if part.strip()]
+        if len(parts) != 3:
+            raise ValueError(f'{name} 必须是 3 个数字: x,y,z')
+
+        vector = tuple(float(part) for part in parts)
+        norm = math.sqrt(sum(component * component for component in vector))
+        if norm < 1e-9:
+            raise ValueError(f'{name} 不能是零向量')
+        return tuple(component / norm for component in vector)
+
+    @staticmethod
+    def _parse_vector4_parameter(value: str, name: str) -> tuple[float, float, float, float]:
+        parts = [part.strip() for part in value.replace(';', ',').split(',') if part.strip()]
+        if len(parts) != 4:
+            raise ValueError(f'{name} 必须是 4 个数字: x,y,z,w')
+
+        vector = tuple(float(part) for part in parts)
+        norm = math.sqrt(sum(component * component for component in vector))
+        if norm < 1e-9:
+            raise ValueError(f'{name} 不能是零四元数')
+        return tuple(component / norm for component in vector)
 
     @staticmethod
     def _parse_bool_parameter(value) -> bool:

@@ -60,18 +60,7 @@ FoundationPose/debug/
 FoundationPose/demo_data/
 FoundationPose/downloads/
 FoundationPose/weights/
-FoundationPose/realsense/output/
-FoundationPose/realsense/xxx/
-
-# Keep project-specific source assets that are required by the current demo.
-!FoundationPose/yolo26/mesh/
-!FoundationPose/yolo26/mesh/**
-!FoundationPose/yolo26/weight/
-!FoundationPose/yolo26/weight/**
-!FoundationPose/yolo_foundationpose/mesh/
-!FoundationPose/yolo_foundationpose/mesh/**
-!FoundationPose/yolo_foundationpose/weight/
-!FoundationPose/yolo_foundationpose/weight/**
+FoundationPose/realsense/
 
 # SDFR generated/runtime data and large datasets
 SDFR/__pycache__/
@@ -97,9 +86,13 @@ SDFR/my_tools/*.mp4
 *.7z
 *.rar
 
-# Re-include current lightweight demo assets/checkpoints intentionally used by scripts.
-!FoundationPose/yolo26/weight/*.pt
-!FoundationPose/yolo_foundationpose/weight/*.pt
+# Runtime assets required by the current bottle-grasp pipeline.
+# The YOLO checkpoint is about 23 MB, so it can be committed directly to GitHub.
+!FoundationPose/yolo_foundationpose/assets/
+!FoundationPose/yolo_foundationpose/assets/mesh/
+!FoundationPose/yolo_foundationpose/assets/mesh/**
+!FoundationPose/yolo_foundationpose/assets/weights/
+!FoundationPose/yolo_foundationpose/assets/weights/**
 
 # Nested upstream repositories. Do not commit their internal git metadata.
 FoundationPose/.git/

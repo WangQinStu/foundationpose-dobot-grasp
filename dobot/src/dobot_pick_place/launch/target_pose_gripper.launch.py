@@ -30,11 +30,36 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'pre_grasp_height',
             default_value='0.0',
-            description='Move to this many meters above the grasp target before descending. Use 0 to go directly to the grasp target.',
+            description='Move this many meters away from the grasp target before descending. Use 0 to go directly to the grasp target.',
+        ),
+        DeclareLaunchArgument(
+            'pre_grasp_along_tcp',
+            default_value='true',
+            description='If true, pre_grasp_height moves backward along pre_grasp_axis_tcp transformed by the target orientation. If false, it moves along base Z.',
+        ),
+        DeclareLaunchArgument(
+            'pre_grasp_axis_tcp',
+            default_value='0,0,-1',
+            description='TCP-frame retreat axis. Pre-grasp moves opposite this axis.',
+        ),
+        DeclareLaunchArgument(
+            'fallback_to_pick_when_pre_grasp_rejected',
+            default_value='true',
+            description='If a pre-grasp pose is rejected by the controller, skip it and try the original pick pose.',
+        ),
+        DeclareLaunchArgument(
+            'fallback_pick_orientation_on_reject',
+            default_value='true',
+            description='If the pick pose is rejected, retry once at the same xyz with fallback_pick_quat_xyzw.',
+        ),
+        DeclareLaunchArgument(
+            'fallback_pick_quat_xyzw',
+            default_value='0.011411472351837162,0.0016656594789129023,0.03427464789428714,0.99934591227912',
+            description='Fallback fixed grasp orientation qx,qy,qz,qw used when a 3D pick orientation is rejected.',
         ),
         DeclareLaunchArgument(
             'gripper_close_distance',
-            default_value='0.03',
+            default_value='0.008',
             description='Close the gripper when current TCP is within this distance from target, in meters.',
         ),
         DeclareLaunchArgument(
@@ -49,7 +74,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'pick_close_timeout',
-            default_value='5.0',
+            default_value='0.0',
             description='Fallback seconds after pick MovL response before closing the gripper if arrival threshold is not reached. Use 0 to disable.',
         ),
         DeclareLaunchArgument(
@@ -66,6 +91,21 @@ def generate_launch_description():
             'trust_enable_service_response',
             default_value='true',
             description='Continue after EnableRobot/Continue succeeds even if RobotStatus.is_enable remains false.',
+        ),
+        DeclareLaunchArgument(
+            'auto_initialize_robot',
+            default_value='true',
+            description='Run RequestControl/PowerOn/EnableRobot before the first motion. Set false if the robot is already enabled and these services are slow or unavailable.',
+        ),
+        DeclareLaunchArgument(
+            'wait_for_robot_connection',
+            default_value='true',
+            description='Hold a received target until RobotStatus reports an active TCP connection.',
+        ),
+        DeclareLaunchArgument(
+            'connection_wait_timeout',
+            default_value='15.0',
+            description='Maximum seconds to wait for the robot TCP connection before rejecting the target.',
         ),
         DeclareLaunchArgument(
             'movl_service',
@@ -243,6 +283,11 @@ def generate_launch_description():
                 'current_pose_topic': LaunchConfiguration('current_pose_topic'),
                 'grasp_z_offset': LaunchConfiguration('grasp_z_offset'),
                 'pre_grasp_height': LaunchConfiguration('pre_grasp_height'),
+                'pre_grasp_along_tcp': LaunchConfiguration('pre_grasp_along_tcp'),
+                'pre_grasp_axis_tcp': LaunchConfiguration('pre_grasp_axis_tcp'),
+                'fallback_to_pick_when_pre_grasp_rejected': LaunchConfiguration('fallback_to_pick_when_pre_grasp_rejected'),
+                'fallback_pick_orientation_on_reject': LaunchConfiguration('fallback_pick_orientation_on_reject'),
+                'fallback_pick_quat_xyzw': LaunchConfiguration('fallback_pick_quat_xyzw'),
                 'gripper_close_distance': LaunchConfiguration('gripper_close_distance'),
                 'gripper_close_angle': LaunchConfiguration('gripper_close_angle'),
                 'gripper_open_on_start': LaunchConfiguration('gripper_open_on_start'),
@@ -250,6 +295,9 @@ def generate_launch_description():
                 'ignore_request_control_failure': LaunchConfiguration('ignore_request_control_failure'),
                 'ignore_speed_factor_failure': LaunchConfiguration('ignore_speed_factor_failure'),
                 'trust_enable_service_response': LaunchConfiguration('trust_enable_service_response'),
+                'auto_initialize_robot': LaunchConfiguration('auto_initialize_robot'),
+                'wait_for_robot_connection': LaunchConfiguration('wait_for_robot_connection'),
+                'connection_wait_timeout': LaunchConfiguration('connection_wait_timeout'),
                 'gripper_close_dir': LaunchConfiguration('gripper_close_dir'),
                 'place_after_grasp': LaunchConfiguration('place_after_grasp'),
                 'intermediate_pose': LaunchConfiguration('intermediate_pose'),

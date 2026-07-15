@@ -9,25 +9,26 @@ pick-and-place sequence with a motorized gripper.
 
 ## Demo Videos
 
-Click a preview to open the MP4 video on GitHub.
+GitHub may not render larger MP4 files on its file-preview page. Click a
+preview or the link below it to open the raw video directly in your browser.
 
 ### 6D Pose Estimation: Single Bottle
 
-[![Single-bottle 6D pose estimation](docs/videos/previews/one_bottle.png)](docs/videos/one_bottle.mp4)
+[![Single-bottle 6D pose estimation](docs/videos/previews/one_bottle.png)](docs/videos/one_bottle.mp4?raw=1)
 
-[Open the single-bottle pose estimation video](docs/videos/one_bottle.mp4)
+[Play or download the single-bottle pose estimation video](docs/videos/one_bottle.mp4?raw=1)
 
 ### 6D Pose Estimation: Book
 
-[![Book 6D pose estimation](docs/videos/previews/book.png)](docs/videos/book.mp4)
+[![Book 6D pose estimation](docs/videos/previews/book.png)](docs/videos/book.mp4?raw=1)
 
-[Open the book pose estimation video](docs/videos/book.mp4)
+[Play or download the book pose estimation video](docs/videos/book.mp4?raw=1)
 
 ### Multi-Bottle 3D Grasping
 
-[![Dobot grasping multiple bottles](docs/videos/previews/grab.png)](docs/videos/grab.mp4)
+[![Dobot grasping multiple bottles](docs/videos/previews/grab.png)](docs/videos/grab.mp4?raw=1)
 
-[Open the multi-bottle grasping video](docs/videos/grab.mp4)
+[Play or download the multi-bottle grasping video](docs/videos/grab.mp4?raw=1)
 
 ## Features
 
